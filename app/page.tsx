@@ -39,6 +39,17 @@ export default function Home() {
           </button>
         </div>
 
+        <p className="mt-8 text-gray-600 dark:text-gray-400">
+          <a
+            href="https://shikiho.toyokeizai.net/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            四季報オンライン →
+          </a>
+        </p>
+
       </div>
     </div>
   );
