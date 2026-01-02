@@ -9,7 +9,7 @@ export default function Home() {
       <div className="text-center">
 
         <h1 className="text-4xl font-bold mb-8 text-gray-900 dark:text-white">
-          カウンター
+          tap to increase or decrease
         </h1>
 
         <div className="text-8xl font-bold mb-12 text-blue-600 dark:text-blue-400">
@@ -22,6 +22,13 @@ export default function Home() {
             className="w-20 h-20 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-3xl font-bold"
           >
             +
+          </button>
+
+          <button
+            onClick={() => setCount(count - 1)}
+            className="w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-lg text-3xl font-bold"
+          >
+            -
           </button>
 
           <button
