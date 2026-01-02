@@ -5,7 +5,7 @@ export default function Home() {
   // Financial calculation state
   const [sales, setSales] = useState('');           // Revenue
   const [marketCap, setMarketCap] = useState('');   // Market Cap
-  const [psr, setPsr] = useState(null);             // PSR (Result)
+  const [psr, setPsr] = useState<number | null>(null);  // PSR (Result)
 
   // Calculate PSR
   const calculatePSR = () => {
