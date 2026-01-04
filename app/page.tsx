@@ -15,10 +15,10 @@ export default function Home() {
         <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="max-w-7xl mx-auto px-4 py-3">
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-              投資分析ダッシュボード
+              分析ダッシュボード
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              投資判断フロー：成長性 → 収益性 → 安全性 → 割安性
+              判断フロー：成長性 → 収益性 → 安全性 → 割安性
             </p>
           </div>
         </header>

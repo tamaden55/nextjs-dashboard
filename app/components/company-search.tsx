@@ -33,6 +33,9 @@ export default function CompanySearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [dataSource, setDataSource] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [fiscalPeriodEnd, setFiscalPeriodEnd] = useState<string | null>(null);
 
   const handleFetchData = async () => {
     if (!securitiesCode || securitiesCode.length !== 4) {
@@ -43,6 +46,9 @@ export default function CompanySearch() {
     setLoading(true);
     setError(null);
     setCompanyName(null);
+    setDataSource(null);
+    setFetchedAt(null);
+    setFiscalPeriodEnd(null);
 
     try {
       const response = await fetch(`/api/edinet/${securitiesCode}`);
@@ -58,6 +64,9 @@ export default function CompanySearch() {
       }
 
       setCompanyName(data.companyName);
+      setDataSource(data.dataSource);
+      setFetchedAt(data.fetchedAt);
+      setFiscalPeriodEnd(data.fiscalPeriodEnd);
       setData(data.financialData);
     } catch (err) {
       setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
@@ -70,7 +79,7 @@ export default function CompanySearch() {
     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-lg border-2 border-blue-200 dark:border-blue-900 p-5 mb-6">
       <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white flex items-center">
         <span className="text-2xl mr-2">🔍</span>
-        企業データ自動取得（EDINET API）
+        企業データ自動取得（Yahoo Finance API）
       </h2>
 
       <div className="flex gap-3 items-start">
@@ -108,12 +117,61 @@ export default function CompanySearch() {
           <p className="text-sm text-green-700 dark:text-green-400">
             ✓ {companyName} のデータを取得しました
           </p>
+          {dataSource && fetchedAt && (
+            <p className="text-xs text-green-600 dark:text-green-500 mt-1">
+              データソース: {dataSource}
+              {fiscalPeriodEnd && (
+                <> | 決算期: {new Date(fiscalPeriodEnd).toLocaleString('ja-JP', {
+                  year: 'numeric',
+                  month: 'long',
+                })}期</>
+              )}
+              {' '}| 取得: {new Date(fetchedAt).toLocaleString('ja-JP', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          )}
         </div>
       )}
 
       <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
-        <p>※ 金融庁のEDINET APIから最新の有価証券報告書データを取得します</p>
+        <p>※ Yahoo Finance APIから財務データを取得します</p>
         <p>※ データ取得には数秒かかる場合があります</p>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
+        <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+          参考サイト（外部リンク）
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="https://shikiho.toyokeizai.net/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-md transition-colors"
+          >
+            会社四季報オンライン
+          </a>
+          <a
+            href="https://kabutan.jp/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-md transition-colors"
+          >
+            株探
+          </a>
+          <a
+            href="https://finance.yahoo.co.jp/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-md transition-colors"
+          >
+            Yahoo!ファイナンス
+          </a>
+        </div>
       </div>
     </div>
   );

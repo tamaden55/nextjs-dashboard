@@ -1,28 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import YahooFinance from 'yahoo-finance2';
 
 /**
- * EDINET API Route Handler
- * Fetches financial data from Japan's EDINET (Electronic Disclosure for Investors' NETwork)
+ * Yahoo Finance API Route Handler
+ * Fetches financial data from Yahoo Finance for Japanese stocks
  */
 
-const EDINET_BASE_URL = 'https://disclosure.edinet-fsa.go.jp/api/v2';
-
-interface EdinetDocument {
-  docID: string;
-  filerName: string;
-  docDescription: string;
-  submitDateTime: string;
-  secCode?: string;
-}
-
-interface EdinetDocumentsResponse {
-  metadata: {
-    resultset: {
-      count: number;
-    };
-  };
-  results: EdinetDocument[];
-}
+// Initialize YahooFinance instance
+const yahooFinance = new YahooFinance();
 
 export async function GET(
   request: NextRequest,
@@ -33,39 +18,59 @@ export async function GET(
   try {
     console.log('API called with code:', securitiesCode);
 
-    // For now, return placeholder data immediately
-    // TODO: Implement real EDINET data fetching later
-    const financialData = {
-      // Growth metrics
-      revenue: '100000',
-      marketCap: '500000',
-      capex: '5000',
-      depreciation: '3000',
-      revenueCurrentYear: '100000',
-      revenueFourYearsAgo: '80000',
+    // Add .T suffix for Tokyo Stock Exchange
+    const symbol = `${securitiesCode}.T`;
 
-      // Profitability metrics
-      netIncome: '10000',
-      equity: '200000',
-      totalAssets: '300000',
-      operatingIncome: '15000',
+    // Fetch company data - use single quoteSummary call
+    const quoteSummary = await yahooFinance.quoteSummary(symbol, {
+      modules: [
+        'price',
+        'summaryDetail',
+        'financialData',
+        'defaultKeyStatistics',
+        'incomeStatementHistory',
+        'balanceSheetHistory',
+        'cashflowStatementHistory'
+      ]
+    });
 
-      // Safety metrics
-      currentAssets: '150000',
-      currentLiabilities: '50000',
+    // Type assertion for Yahoo Finance response
+    const quoteData = quoteSummary as any;
+    const priceInfo = quoteData?.price || {};
 
-      // Valuation metrics
-      stockPrice: '2500',
-      annualDividend: '100',
-    };
+    console.log('Found company:', priceInfo.longName || priceInfo.shortName);
+    console.log('Raw quoteSummary data:', JSON.stringify(quoteData, null, 2));
+
+    // Extract financial data
+    const financialData = extractFinancialData(quoteData);
+    console.log('Extracted financial data:', financialData);
+
+    // Get fiscal period information
+    const lastFiscalYearEnd = quoteData?.defaultKeyStatistics?.lastFiscalYearEnd || null;
+    const mostRecentQuarter = quoteData?.defaultKeyStatistics?.mostRecentQuarter || null;
+    const latestIncomeStatement = quoteData?.incomeStatementHistory?.incomeStatementHistory?.[0];
+    const fiscalPeriodEnd = latestIncomeStatement?.endDate || lastFiscalYearEnd || mostRecentQuarter;
 
     return NextResponse.json({
-      companyName: `企業コード${securitiesCode}`,
-      submitDate: new Date().toISOString(),
+      companyName: priceInfo.longName || priceInfo.shortName || `証券コード ${securitiesCode}`,
+      symbol: symbol,
       financialData,
+      dataSource: 'Yahoo Finance',
+      fetchedAt: new Date().toISOString(),
+      lastMarketUpdate: priceInfo.regularMarketTime || null,
+      fiscalPeriodEnd: fiscalPeriodEnd,
     });
   } catch (error) {
-    console.error('EDINET API Error:', error);
+    console.error('Yahoo Finance API Error:', error);
+
+    // Check if it's a symbol not found error
+    if (error instanceof Error && error.message.includes('Not Found')) {
+      return NextResponse.json(
+        { error: `証券コード ${securitiesCode} が見つかりませんでした。東証上場企業のコードを入力してください。` },
+        { status: 404 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'データ取得中にエラーが発生しました' },
       { status: 500 }
@@ -74,91 +79,90 @@ export async function GET(
 }
 
 /**
- * Find the latest securities report for a given company
+ * Extract and format financial data from Yahoo Finance response
  */
-async function findLatestSecuritiesReport(
-  securitiesCode: string
-): Promise<EdinetDocument | null> {
-  // Search for documents from the past 6 months
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setMonth(startDate.getMonth() - 6);
+function extractFinancialData(quoteSummary: any) {
+  const financialData = quoteSummary?.financialData || {};
+  const summaryDetail = quoteSummary?.summaryDetail || {};
+  const defaultKeyStats = quoteSummary?.defaultKeyStatistics || {};
+  const price = quoteSummary?.price || {};
 
-  const dateStr = formatDate(endDate);
+  // Get latest financial statements (limited data since Nov 2024)
+  const incomeStatement = quoteSummary?.incomeStatementHistory?.incomeStatementHistory?.[0];
+  const incomeStatements = quoteSummary?.incomeStatementHistory?.incomeStatementHistory || [];
+  const cashflow = quoteSummary?.cashflowStatementHistory?.cashflowStatements?.[0];
 
-  // Type 2 = 有価証券報告書 (Securities Report)
-  const url = `${EDINET_BASE_URL}/documents.json?date=${dateStr}&type=2`;
+  // Helper function to safely convert to string
+  const toStr = (value: any) => value != null && value !== 0 ? String(value) : '0';
 
-  const response = await fetch(url);
-  const data: EdinetDocumentsResponse = await response.json();
+  // Helper function to convert to millions (百万円)
+  const toMillions = (value: any) => {
+    if (value == null || value === 0) return '0';
+    return String(Math.round(value / 1000000));
+  };
 
-  if (!data.results || data.results.length === 0) {
-    return null;
-  }
+  // Get current stock price
+  const currentPrice = price?.regularMarketPrice || price?.currentPrice || summaryDetail?.regularMarketPrice || 0;
 
-  // Filter by securities code and find the most recent report
-  const documents = data.results.filter((doc) => doc.secCode === securitiesCode);
+  // Calculate equity from bookValue * sharesOutstanding
+  const bookValue = defaultKeyStats?.bookValue || 0;
+  const sharesOutstanding = defaultKeyStats?.sharesOutstanding || 0;
+  const equity = bookValue * sharesOutstanding;
 
-  if (documents.length === 0) {
-    return null;
-  }
+  // Get historical revenue data
+  console.log('Income statements count:', incomeStatements.length);
+  incomeStatements.forEach((stmt: any, idx: number) => {
+    console.log(`Statement ${idx}:`, stmt.endDate, 'Revenue:', stmt.totalRevenue);
+  });
 
-  // Sort by submission date (most recent first)
-  documents.sort((a, b) =>
-    new Date(b.submitDateTime).getTime() - new Date(a.submitDateTime).getTime()
-  );
+  // Filter out quarterly data (identify by comparing with current year)
+  // Quarterly data is typically much smaller than annual data
+  const currentRevenue = financialData.totalRevenue || incomeStatement?.totalRevenue || 0;
+  const annualStatements = incomeStatements.filter((stmt: any) => {
+    // Consider it annual data if revenue is at least 50% of current annual revenue
+    return stmt.totalRevenue && stmt.totalRevenue > currentRevenue * 0.5;
+  });
 
-  return documents[0];
-}
+  console.log('Annual statements found:', annualStatements.length);
 
-/**
- * Fetch and parse financial data from XBRL
- */
-async function fetchFinancialData(docID: string) {
-  // Type 5 = XBRL形式のデータ
-  const url = `${EDINET_BASE_URL}/documents/${docID}?type=5`;
+  // Get 4 years ago revenue (use oldest available annual data)
+  // Prefer statement from 3-4 years ago if available
+  const revenueFourYearsAgo = annualStatements[annualStatements.length - 1]?.totalRevenue ||
+                               incomeStatements[2]?.totalRevenue || // Try 3 years ago
+                               incomeStatements[1]?.totalRevenue || // Try 2 years ago
+                               currentRevenue;
 
-  const response = await fetch(url);
+  console.log('Revenue 4 years ago (filtered):', revenueFourYearsAgo);
 
-  if (!response.ok) {
-    throw new Error('Failed to fetch XBRL data');
-  }
-
-  // For now, return a placeholder
-  // TODO: Parse XBRL data properly
-  // This requires unzipping the response and parsing XML
+  // Calculate depreciation from EBITDA
+  // EBITDA = Operating Income + Depreciation & Amortization
+  // Therefore: Depreciation ≈ EBITDA - Operating Income
+  const totalRev = financialData.totalRevenue || incomeStatement?.totalRevenue || 0;
+  const operatingIncome = totalRev * (financialData.operatingMargins || 0);
+  const ebitda = financialData.ebitda || 0;
+  const depreciation = Math.max(0, ebitda - operatingIncome); // D&A approximation
 
   return {
-    // Growth metrics
-    revenue: '100000',
-    marketCap: '500000',
-    capex: '5000',
-    depreciation: '3000',
-    revenueCurrentYear: '100000',
-    revenueFourYearsAgo: '80000',
+    // Growth metrics (in millions JPY)
+    revenue: toMillions(financialData.totalRevenue || incomeStatement?.totalRevenue),
+    marketCap: toMillions(price?.marketCap || summaryDetail?.marketCap),
+    capex: toMillions(Math.abs(financialData.freeCashflow || 0)), // Using free cash flow as proxy
+    depreciation: toMillions(depreciation),
+    revenueCurrentYear: toMillions(financialData.totalRevenue || incomeStatement?.totalRevenue),
+    revenueFourYearsAgo: toMillions(revenueFourYearsAgo),
 
-    // Profitability metrics
-    netIncome: '10000',
-    equity: '200000',
-    totalAssets: '300000',
-    operatingIncome: '15000',
+    // Profitability metrics (in millions JPY)
+    netIncome: toMillions(defaultKeyStats?.netIncomeToCommon || cashflow?.netIncome || incomeStatement?.netIncome),
+    equity: toMillions(equity),
+    totalAssets: toMillions(equity * (financialData.debtToEquity / 100 + 1)), // Estimate from D/E ratio
+    operatingIncome: toMillions(financialData.ebitda || incomeStatement?.operatingIncome),
 
-    // Safety metrics
-    currentAssets: '150000',
-    currentLiabilities: '50000',
+    // Safety metrics (in millions JPY)
+    currentAssets: toMillions(financialData.totalCash * financialData.currentRatio || 0),
+    currentLiabilities: toMillions(financialData.totalCash || 0),
 
-    // Valuation metrics
-    stockPrice: '2500',
-    annualDividend: '100',
+    // Valuation metrics (stock price and dividend are in JPY, not millions)
+    stockPrice: toStr(currentPrice),
+    annualDividend: toStr(summaryDetail?.dividendRate || summaryDetail?.trailingAnnualDividendRate || 0),
   };
-}
-
-/**
- * Format date as YYYY-MM-DD
- */
-function formatDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
